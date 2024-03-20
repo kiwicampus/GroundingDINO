@@ -20,32 +20,22 @@ from typing import List
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torchvision.ops.boxes import nms
-from transformers import AutoTokenizer, BertModel, BertTokenizer, RobertaModel, RobertaTokenizerFast
 
-from groundingdino.util import box_ops, get_tokenlizer
+from groundingdino.util import get_tokenlizer
 from groundingdino.util.misc import (
     NestedTensor,
-    accuracy,
-    get_world_size,
-    interpolate,
     inverse_sigmoid,
-    is_dist_avail_and_initialized,
     nested_tensor_from_tensor_list,
 )
-from groundingdino.util.utils import get_phrases_from_posmap
-from groundingdino.util.visualizer import COCOVisualizer
-from groundingdino.util.vl_utils import create_positive_map_from_span
 
 from ..registry import MODULE_BUILD_FUNCS
 from .backbone import build_backbone
 from .bertwarper import (
     BertModelWarper,
-    generate_masks_with_special_tokens,
     generate_masks_with_special_tokens_and_transfer_map,
 )
 from .transformer import build_transformer
-from .utils import MLP, ContrastiveEmbed, sigmoid_focal_loss
+from .utils import MLP, ContrastiveEmbed
 
 
 class GroundingDINO(nn.Module):
@@ -74,7 +64,7 @@ class GroundingDINO(nn.Module):
         text_encoder_type="bert-base-uncased",
         sub_sentence_present=True,
         max_text_len=256,
-    ):
+    ) -> None:
         """Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -110,13 +100,17 @@ class GroundingDINO(nn.Module):
         self.bert.pooler.dense.bias.requires_grad_(False)
         self.bert = BertModelWarper(bert_model=self.bert)
 
-        self.feat_map = nn.Linear(self.bert.config.hidden_size, self.hidden_dim, bias=True)
+        self.feat_map = nn.Linear(
+            self.bert.config.hidden_size, self.hidden_dim, bias=True
+        )
         nn.init.constant_(self.feat_map.bias.data, 0)
         nn.init.xavier_uniform_(self.feat_map.weight.data)
         # freeze
 
         # special tokens
-        self.specical_tokens = self.tokenizer.convert_tokens_to_ids(["[CLS]", "[SEP]", ".", "?"])
+        self.specical_tokens = self.tokenizer.convert_tokens_to_ids(
+            ["[CLS]", "[SEP]", ".", "?"]
+        )
 
         # prepare input projection layers
         if num_feature_levels > 1:
@@ -133,14 +127,18 @@ class GroundingDINO(nn.Module):
             for _ in range(num_feature_levels - num_backbone_outs):
                 input_proj_list.append(
                     nn.Sequential(
-                        nn.Conv2d(in_channels, hidden_dim, kernel_size=3, stride=2, padding=1),
+                        nn.Conv2d(
+                            in_channels, hidden_dim, kernel_size=3, stride=2, padding=1
+                        ),
                         nn.GroupNorm(32, hidden_dim),
                     )
                 )
                 in_channels = hidden_dim
             self.input_proj = nn.ModuleList(input_proj_list)
         else:
-            assert two_stage_type == "no", "two_stage_type should be no if num_feature_levels=1 !!!"
+            assert (
+                two_stage_type == "no"
+            ), "two_stage_type should be no if num_feature_levels=1 !!!"
             self.input_proj = nn.ModuleList(
                 [
                     nn.Sequential(
@@ -152,7 +150,7 @@ class GroundingDINO(nn.Module):
 
         self.backbone = backbone
         self.aux_loss = aux_loss
-        self.box_pred_damping = box_pred_damping = None
+        self.box_pred_damping = None
 
         self.iter_update = iter_update
         assert iter_update, "Why not iter_update?"
@@ -167,12 +165,17 @@ class GroundingDINO(nn.Module):
         nn.init.constant_(_bbox_embed.layers[-1].bias.data, 0)
 
         if dec_pred_bbox_embed_share:
-            box_embed_layerlist = [_bbox_embed for i in range(transformer.num_decoder_layers)]
+            box_embed_layerlist = [
+                _bbox_embed for i in range(transformer.num_decoder_layers)
+            ]
         else:
             box_embed_layerlist = [
-                copy.deepcopy(_bbox_embed) for i in range(transformer.num_decoder_layers)
+                copy.deepcopy(_bbox_embed)
+                for i in range(transformer.num_decoder_layers)
             ]
-        class_embed_layerlist = [_class_embed for i in range(transformer.num_decoder_layers)]
+        class_embed_layerlist = [
+            _class_embed for i in range(transformer.num_decoder_layers)
+        ]
         self.bbox_embed = nn.ModuleList(box_embed_layerlist)
         self.class_embed = nn.ModuleList(class_embed_layerlist)
         self.transformer.decoder.bbox_embed = self.bbox_embed
@@ -180,9 +183,10 @@ class GroundingDINO(nn.Module):
 
         # two stage
         self.two_stage_type = two_stage_type
-        assert two_stage_type in ["no", "standard"], "unknown param {} of two_stage_type".format(
-            two_stage_type
-        )
+        assert two_stage_type in [
+            "no",
+            "standard",
+        ], "unknown param {} of two_stage_type".format(two_stage_type)
         if two_stage_type != "no":
             if two_stage_bbox_embed_share:
                 assert dec_pred_bbox_embed_share
@@ -200,28 +204,28 @@ class GroundingDINO(nn.Module):
 
         self._reset_parameters()
 
-    def _reset_parameters(self):
+    def _reset_parameters(self) -> None:
         # init input_proj
         for proj in self.input_proj:
             nn.init.xavier_uniform_(proj[0].weight, gain=1)
             nn.init.constant_(proj[0].bias, 0)
 
-    def set_image_tensor(self, samples: NestedTensor):
+    def set_image_tensor(self, samples: NestedTensor) -> None:
         if isinstance(samples, (list, torch.Tensor)):
             samples = nested_tensor_from_tensor_list(samples)
         self.features, self.poss = self.backbone(samples)
 
-    def unset_image_tensor(self):
-        if hasattr(self, 'features'):
+    def unset_image_tensor(self) -> None:
+        if hasattr(self, "features"):
             del self.features
-        if hasattr(self,'poss'):
-            del self.poss 
+        if hasattr(self, "poss"):
+            del self.poss
 
-    def set_image_features(self, features , poss):
+    def set_image_features(self, features, poss) -> None:
         self.features = features
         self.poss = poss
 
-    def init_ref_points(self, use_num_queries):
+    def init_ref_points(self, use_num_queries) -> None:
         self.refpoint_embed = nn.Embedding(use_num_queries, self.query_dim)
 
     def forward(self, samples: NestedTensor, targets: List = None, **kw):
@@ -262,12 +266,18 @@ class GroundingDINO(nn.Module):
             ]
             position_ids = position_ids[:, : self.max_text_len]
             tokenized["input_ids"] = tokenized["input_ids"][:, : self.max_text_len]
-            tokenized["attention_mask"] = tokenized["attention_mask"][:, : self.max_text_len]
-            tokenized["token_type_ids"] = tokenized["token_type_ids"][:, : self.max_text_len]
+            tokenized["attention_mask"] = tokenized["attention_mask"][
+                :, : self.max_text_len
+            ]
+            tokenized["token_type_ids"] = tokenized["token_type_ids"][
+                :, : self.max_text_len
+            ]
 
         # extract text embeddings
         if self.sub_sentence_present:
-            tokenized_for_encoder = {k: v for k, v in tokenized.items() if k != "attention_mask"}
+            tokenized_for_encoder = {
+                k: v for k, v in tokenized.items() if k != "attention_mask"
+            }
             tokenized_for_encoder["attention_mask"] = text_self_attention_masks
             tokenized_for_encoder["position_ids"] = position_ids
         else:
@@ -276,7 +286,9 @@ class GroundingDINO(nn.Module):
 
         bert_output = self.bert(**tokenized_for_encoder)  # bs, 195, 768
 
-        encoded_text = self.feat_map(bert_output["last_hidden_state"])  # bs, 195, d_model
+        encoded_text = self.feat_map(
+            bert_output["last_hidden_state"]
+        )  # bs, 195, d_model
         text_token_mask = tokenized.attention_mask.bool()  # bs, 195
         # text_token_mask: True for nomask, False for mask
         # text_self_attention_masks: True for nomask, False for mask
@@ -299,7 +311,7 @@ class GroundingDINO(nn.Module):
         # import ipdb; ipdb.set_trace()
         if isinstance(samples, (list, torch.Tensor)):
             samples = nested_tensor_from_tensor_list(samples)
-        if not hasattr(self, 'features') or not hasattr(self, 'poss'):
+        if not hasattr(self, "features") or not hasattr(self, "poss"):
             self.set_image_tensor(samples)
 
         srcs = []
@@ -317,15 +329,23 @@ class GroundingDINO(nn.Module):
                 else:
                     src = self.input_proj[l](srcs[-1])
                 m = samples.mask
-                mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
+                mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(
+                    torch.bool
+                )[0]
                 pos_l = self.backbone[1](NestedTensor(src, mask)).to(src.dtype)
                 srcs.append(src)
                 masks.append(mask)
                 self.poss.append(pos_l)
 
-        input_query_bbox = input_query_label = attn_mask = dn_meta = None
+        input_query_bbox = input_query_label = attn_mask = None
         hs, reference, hs_enc, ref_enc, init_box_proposal = self.transformer(
-            srcs, masks, input_query_bbox, self.poss, input_query_label, attn_mask, text_dict
+            srcs,
+            masks,
+            input_query_bbox,
+            self.poss,
+            input_query_label,
+            attn_mask,
+            text_dict,
         )
 
         # deformable-detr-like anchor update
@@ -359,9 +379,9 @@ class GroundingDINO(nn.Module):
         #     interm_class = self.transformer.enc_out_class_embed(hs_enc[-1], text_dict)
         #     out['interm_outputs'] = {'pred_logits': interm_class, 'pred_boxes': interm_coord}
         #     out['interm_outputs_for_matching_pre'] = {'pred_logits': interm_class, 'pred_boxes': init_box_proposal}
-        unset_image_tensor = kw.get('unset_image_tensor', True)
+        unset_image_tensor = kw.get("unset_image_tensor", True)
         if unset_image_tensor:
-            self.unset_image_tensor() ## If necessary
+            self.unset_image_tensor()  ## If necessary
         return out
 
     @torch.jit.unused
@@ -377,7 +397,6 @@ class GroundingDINO(nn.Module):
 
 @MODULE_BUILD_FUNCS.registe_with_name(module_name="groundingdino")
 def build_groundingdino(args):
-
     backbone = build_backbone(args)
     transformer = build_transformer(args)
 
@@ -409,4 +428,3 @@ def build_groundingdino(args):
     )
 
     return model
-

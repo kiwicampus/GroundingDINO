@@ -16,7 +16,7 @@
 
 import math
 import warnings
-from typing import Optional
+from typing import NoReturn, Optional
 
 import torch
 import torch.nn as nn
@@ -34,7 +34,9 @@ except:
 # helpers
 def _is_power_of_2(n):
     if (not isinstance(n, int)) or (n < 0):
-        raise ValueError("invalid input for _is_power_of_2: {} (type: {})".format(n, type(n)))
+        raise ValueError(
+            "invalid input for _is_power_of_2: {} (type: {})".format(n, type(n))
+        )
     return (n & (n - 1) == 0) and n != 0
 
 
@@ -96,7 +98,6 @@ def multi_scale_deformable_attn_pytorch(
     sampling_locations: torch.Tensor,
     attention_weights: torch.Tensor,
 ) -> torch.Tensor:
-
     bs, _, num_heads, embed_dims = value.shape
     _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
     value_list = value.split([H_ * W_ for H_, W_ in value_spatial_shapes], dim=1)
@@ -108,7 +109,10 @@ def multi_scale_deformable_attn_pytorch(
         # bs, num_heads*embed_dims, H_*W_ ->
         # bs*num_heads, embed_dims, H_, W_
         value_l_ = (
-            value_list[level].flatten(2).transpose(1, 2).reshape(bs * num_heads, embed_dims, H_, W_)
+            value_list[level]
+            .flatten(2)
+            .transpose(1, 2)
+            .reshape(bs * num_heads, embed_dims, H_, W_)
         )
         # bs, num_queries, num_heads, num_points, 2 ->
         # bs, num_heads, num_queries, num_points, 2 ->
@@ -116,7 +120,11 @@ def multi_scale_deformable_attn_pytorch(
         sampling_grid_l_ = sampling_grids[:, :, :, level].transpose(1, 2).flatten(0, 1)
         # bs*num_heads, embed_dims, num_queries, num_points
         sampling_value_l_ = F.grid_sample(
-            value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
+            value_l_,
+            sampling_grid_l_,
+            mode="bilinear",
+            padding_mode="zeros",
+            align_corners=False,
         )
         sampling_value_list.append(sampling_value_l_)
     # (bs, num_queries, num_heads, num_levels, num_points) ->
@@ -159,7 +167,7 @@ class MultiScaleDeformableAttention(nn.Module):
         num_points: int = 4,
         img2col_step: int = 64,
         batch_first: bool = False,
-    ):
+    ) -> None:
         super().__init__()
         if embed_dim % num_heads != 0:
             raise ValueError(
@@ -184,8 +192,12 @@ class MultiScaleDeformableAttention(nn.Module):
         self.num_heads = num_heads
         self.num_levels = num_levels
         self.num_points = num_points
-        self.sampling_offsets = nn.Linear(embed_dim, num_heads * num_levels * num_points * 2)
-        self.attention_weights = nn.Linear(embed_dim, num_heads * num_levels * num_points)
+        self.sampling_offsets = nn.Linear(
+            embed_dim, num_heads * num_levels * num_points * 2
+        )
+        self.attention_weights = nn.Linear(
+            embed_dim, num_heads * num_levels * num_points
+        )
         self.value_proj = nn.Linear(embed_dim, embed_dim)
         self.output_proj = nn.Linear(embed_dim, embed_dim)
 
@@ -194,7 +206,7 @@ class MultiScaleDeformableAttention(nn.Module):
     def _reset_parameters(self):
         return self.init_weights()
 
-    def init_weights(self):
+    def init_weights(self) -> None:
         """
         Default initialization for Parameters of Module.
         """
@@ -219,12 +231,12 @@ class MultiScaleDeformableAttention(nn.Module):
         xavier_uniform_(self.output_proj.weight.data)
         constant_(self.output_proj.bias.data, 0.0)
 
-    def freeze_sampling_offsets(self):
+    def freeze_sampling_offsets(self) -> None:
         print("Freeze sampling offsets")
         self.sampling_offsets.weight.requires_grad = False
         self.sampling_offsets.bias.requires_grad = False
 
-    def freeze_attention_weights(self):
+    def freeze_attention_weights(self) -> None:
         print("Freeze attention weights")
         self.attention_weights.weight.requires_grad = False
         self.attention_weights.bias.requires_grad = False
@@ -239,9 +251,8 @@ class MultiScaleDeformableAttention(nn.Module):
         reference_points: Optional[torch.Tensor] = None,
         spatial_shapes: Optional[torch.Tensor] = None,
         level_start_index: Optional[torch.Tensor] = None,
-        **kwargs
+        **kwargs,
     ) -> torch.Tensor:
-
         """Forward Function of MultiScaleDeformableAttention
 
         Args:
@@ -307,7 +318,9 @@ class MultiScaleDeformableAttention(nn.Module):
 
         # bs, num_query, num_heads, num_levels, num_points, 2
         if reference_points.shape[-1] == 2:
-            offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
+            offset_normalizer = torch.stack(
+                [spatial_shapes[..., 1], spatial_shapes[..., 0]], -1
+            )
             sampling_locations = (
                 reference_points[:, :, None, :, None, :]
                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
@@ -326,7 +339,7 @@ class MultiScaleDeformableAttention(nn.Module):
                     reference_points.shape[-1]
                 )
             )
-    
+
         if torch.cuda.is_available() and value.is_cuda:
             halffloat = False
             if value.dtype == torch.float16:
@@ -371,7 +384,9 @@ def create_dummy_class(klass, dependency, message=""):
     Returns:
         class: a class object
     """
-    err = "Cannot import '{}', therefore '{}' is not available.".format(dependency, klass)
+    err = "Cannot import '{}', therefore '{}' is not available.".format(
+        dependency, klass
+    )
     if message:
         err = err + " " + message
 
@@ -382,7 +397,7 @@ def create_dummy_class(klass, dependency, message=""):
 
     class _Dummy(object, metaclass=_DummyMetaClass):
         # throw error on constructor
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args, **kwargs) -> None:
             raise ImportError(err)
 
     return _Dummy
@@ -400,14 +415,16 @@ def create_dummy_func(func, dependency, message=""):
     Returns:
         function: a function object
     """
-    err = "Cannot import '{}', therefore '{}' is not available.".format(dependency, func)
+    err = "Cannot import '{}', therefore '{}' is not available.".format(
+        dependency, func
+    )
     if message:
         err = err + " " + message
 
     if isinstance(dependency, (list, tuple)):
         dependency = ",".join(dependency)
 
-    def _dummy(*args, **kwargs):
+    def _dummy(*args, **kwargs) -> NoReturn:
         raise ImportError(err)
 
     return _dummy

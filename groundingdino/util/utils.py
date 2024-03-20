@@ -12,7 +12,7 @@ from transformers import AutoTokenizer
 from groundingdino.util.slconfig import SLConfig
 
 
-def slprint(x, name="x"):
+def slprint(x, name="x") -> None:
     if isinstance(x, (torch.Tensor, np.ndarray)):
         print(f"{name}.shape:", x.shape)
     elif isinstance(x, (tuple, list)):
@@ -40,7 +40,9 @@ def renorm(
 ) -> torch.FloatTensor:
     # img: tensor(3,H,W) or tensor(B,3,H,W)
     # return: same as img
-    assert img.dim() == 3 or img.dim() == 4, "img.dim() should be 3 or 4 but %d" % img.dim()
+    assert img.dim() == 3 or img.dim() == 4, (
+        "img.dim() should be 3 or 4 but %d" % img.dim()
+    )
     if img.dim() == 3:
         assert img.size(0) == 3, 'img.size(0) shoule be 3 but "%d". (%s)' % (
             img.size(0),
@@ -147,8 +149,12 @@ class CocoClassMapper:
             "89": 79,
             "90": 80,
         }
-        self.origin2compact_mapper = {int(k): v - 1 for k, v in self.category_map_str.items()}
-        self.compact2origin_mapper = {int(v - 1): int(k) for k, v in self.category_map_str.items()}
+        self.origin2compact_mapper = {
+            int(k): v - 1 for k, v in self.category_map_str.items()
+        }
+        self.compact2origin_mapper = {
+            int(v - 1): int(k) for k, v in self.category_map_str.items()
+        }
 
     def origin2compact(self, idx):
         return self.origin2compact_mapper[int(idx)]
@@ -220,11 +226,11 @@ def get_expected_points_from_map(hm, softmax=True):
 # Positional encoding (section 5.1)
 # borrow from nerf
 class Embedder:
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         self.kwargs = kwargs
         self.create_embedding_fn()
 
-    def create_embedding_fn(self):
+    def create_embedding_fn(self) -> None:
         embed_fns = []
         d = self.kwargs["input_dims"]
         out_dim = 0
@@ -268,7 +274,10 @@ def get_embedder(multires, i=0):
     }
 
     embedder_obj = Embedder(**embed_kwargs)
-    embed = lambda x, eo=embedder_obj: eo.embed(x)
+
+    def embed(x, eo=embedder_obj):
+        return eo.embed(x)
+
     return embed, embedder_obj.out_dim
 
 
@@ -279,7 +288,7 @@ class APOPMeter:
         self.tn = 0
         self.fn = 0
 
-    def update(self, pred, gt):
+    def update(self, pred, gt) -> None:
         """
         Input:
             pred, gt: Tensor()
@@ -290,7 +299,7 @@ class APOPMeter:
         self.tn += torch.logical_and(pred == 0, gt == 0).sum().item()
         self.tn += torch.logical_and(pred == 1, gt == 0).sum().item()
 
-    def update_cm(self, tp, fp, tn, fn):
+    def update_cm(self, tp, fp, tn, fn) -> None:
         self.tp += tp
         self.fp += fp
         self.tn += tn
@@ -379,9 +388,11 @@ class NiceRepr:
             return str(len(self))
         else:
             # In all other cases force the subclass to overload __nice__
-            raise NotImplementedError(f"Define the __nice__ method for {self.__class__!r}")
+            raise NotImplementedError(
+                f"Define the __nice__ method for {self.__class__!r}"
+            )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """str: the string of the module"""
         try:
             nice = self.__nice__()
@@ -391,7 +402,7 @@ class NiceRepr:
             warnings.warn(str(ex), category=RuntimeWarning)
             return object.__repr__(self)
 
-    def __str__(self):
+    def __str__(self) -> str:
         """str: the string of the module"""
         try:
             classname = self.__class__.__name__
@@ -471,7 +482,7 @@ def random_boxes(num=1, scale=1, rng=None):
 
 
 class ModelEma(torch.nn.Module):
-    def __init__(self, model, decay=0.9997, device=None):
+    def __init__(self, model, decay=0.9997, device=None) -> None:
         super(ModelEma, self).__init__()
         # make a copy of the model for accumulating moving average of weights
         self.module = deepcopy(model)
@@ -484,7 +495,7 @@ class ModelEma(torch.nn.Module):
         if self.device is not None:
             self.module.to(device=device)
 
-    def _update(self, model, update_fn):
+    def _update(self, model, update_fn) -> None:
         with torch.no_grad():
             for ema_v, model_v in zip(
                 self.module.state_dict().values(), model.state_dict().values()
@@ -493,10 +504,12 @@ class ModelEma(torch.nn.Module):
                     model_v = model_v.to(device=self.device)
                 ema_v.copy_(update_fn(ema_v, model_v))
 
-    def update(self, model):
-        self._update(model, update_fn=lambda e, m: self.decay * e + (1.0 - self.decay) * m)
+    def update(self, model) -> None:
+        self._update(
+            model, update_fn=lambda e, m: self.decay * e + (1.0 - self.decay) * m
+        )
 
-    def set(self, model):
+    def set(self, model) -> None:
         self._update(model, update_fn=lambda e, m: m)
 
 
@@ -515,7 +528,7 @@ class BestMetricSingle:
         if self.better == "small":
             return new_res < old_res
 
-    def update(self, new_res, ep):
+    def update(self, new_res, ep) -> bool:
         if self.isbetter(new_res, self.best_res):
             self.best_res = new_res
             self.best_ep = ep
@@ -592,16 +605,21 @@ def targets_to(targets: List[Dict[str, Any]], device):
         "dataset_type",
     ]
     return [
-        {k: v.to(device) if k not in excluded_keys else v for k, v in t.items()} for t in targets
+        {k: v.to(device) if k not in excluded_keys else v for k, v in t.items()}
+        for t in targets
     ]
 
 
 def get_phrases_from_posmap(
-    posmap: torch.BoolTensor, tokenized: Dict, tokenizer: AutoTokenizer, left_idx: int = 0, right_idx: int = 255
+    posmap: torch.BoolTensor,
+    tokenized: Dict,
+    tokenizer: AutoTokenizer,
+    left_idx: int = 0,
+    right_idx: int = 255,
 ):
     assert isinstance(posmap, torch.Tensor), "posmap must be torch.Tensor"
     if posmap.dim() == 1:
-        posmap[0: left_idx + 1] = False
+        posmap[0 : left_idx + 1] = False
         posmap[right_idx:] = False
         non_zero_idx = posmap.nonzero(as_tuple=True)[0].tolist()
         token_ids = [tokenized["input_ids"][i] for i in non_zero_idx]

@@ -16,17 +16,17 @@ from functools import partial
 
 
 class Registry(object):
-    def __init__(self, name):
+    def __init__(self, name) -> None:
         self._name = name
         self._module_dict = dict()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         format_str = self.__class__.__name__ + "(name={}, items={})".format(
             self._name, list(self._module_dict.keys())
         )
         return format_str
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._module_dict)
 
     @property
@@ -57,7 +57,9 @@ class Registry(object):
         if module_name is None:
             module_name = module_build_function.__name__
         if not force and module_name in self._module_dict:
-            raise KeyError("{} is already registered in {}".format(module_name, self.name))
+            raise KeyError(
+                "{} is already registered in {}".format(module_name, self.name)
+            )
         self._module_dict[module_name] = module_build_function
 
         return module_build_function

@@ -17,21 +17,18 @@ Copy-paste from torch.nn.Transformer with modifications:
 from typing import Optional
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 
 from .utils import (
-    MLP,
     _get_activation_fn,
     _get_clones,
-    gen_encoder_output_proposals,
-    gen_sineembed_for_position,
-    sigmoid_focal_loss,
 )
 
 
 class TextTransformer(nn.Module):
-    def __init__(self, num_layers, d_model=256, nheads=8, dim_feedforward=2048, dropout=0.1):
+    def __init__(
+        self, num_layers, d_model=256, nheads=8, dim_feedforward=2048, dropout=0.1
+    ) -> None:
         super().__init__()
         self.num_layers = num_layers
         self.d_model = d_model
@@ -40,7 +37,10 @@ class TextTransformer(nn.Module):
         self.norm = None
 
         single_encoder_layer = TransformerEncoderLayer(
-            d_model=d_model, nhead=nheads, dim_feedforward=dim_feedforward, dropout=dropout
+            d_model=d_model,
+            nhead=nheads,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
         )
         self.layers = _get_clones(single_encoder_layer, num_layers)
 
@@ -78,7 +78,7 @@ class TransformerEncoderLayer(nn.Module):
         dropout=0.1,
         activation="relu",
         normalize_before=False,
-    ):
+    ) -> None:
         super().__init__()
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
         # Implementation of Feedforward model

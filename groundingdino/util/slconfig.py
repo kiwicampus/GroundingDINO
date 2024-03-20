@@ -18,7 +18,7 @@ DELETE_KEY = "_delete_"
 RESERVED_KEYS = ["filename", "text", "pretty_text", "get", "dump", "merge_from_dict"]
 
 
-def check_file_exist(filename, msg_tmpl='file "{}" does not exist'):
+def check_file_exist(filename, msg_tmpl='file "{}" does not exist') -> None:
     if not osp.isfile(filename):
         raise FileNotFoundError(msg_tmpl.format(filename))
 
@@ -31,7 +31,9 @@ class ConfigDict(Dict):
         try:
             value = super(ConfigDict, self).__getattr__(name)
         except KeyError:
-            ex = AttributeError(f"'{self.__class__.__name__}' object has no " f"attribute '{name}'")
+            ex = AttributeError(
+                f"'{self.__class__.__name__}' object has no " f"attribute '{name}'"
+            )
         except Exception as e:
             ex = e
         else:
@@ -65,7 +67,7 @@ class SLConfig(object):
     """
 
     @staticmethod
-    def _validate_py_syntax(filename):
+    def _validate_py_syntax(filename) -> None:
         with open(filename) as f:
             content = f.read()
         try:
@@ -79,9 +81,11 @@ class SLConfig(object):
         check_file_exist(filename)
         if filename.lower().endswith(".py"):
             with tempfile.TemporaryDirectory() as temp_config_dir:
-                temp_config_file = tempfile.NamedTemporaryFile(dir=temp_config_dir, suffix=".py")
+                temp_config_file = tempfile.NamedTemporaryFile(
+                    dir=temp_config_dir, suffix=".py"
+                )
                 temp_config_name = osp.basename(temp_config_file.name)
-                if os.name == 'nt':
+                if os.name == "nt":
                     temp_config_file.close()
                 shutil.copyfile(filename, osp.join(temp_config_dir, temp_config_name))
                 temp_module_name = osp.splitext(temp_config_name)[0]
@@ -90,7 +94,9 @@ class SLConfig(object):
                 mod = import_module(temp_module_name)
                 sys.path.pop(0)
                 cfg_dict = {
-                    name: value for name, value in mod.__dict__.items() if not name.startswith("__")
+                    name: value
+                    for name, value in mod.__dict__.items()
+                    if not name.startswith("__")
                 }
                 # delete imported module
                 del sys.modules[temp_module_name]
@@ -111,7 +117,9 @@ class SLConfig(object):
         if BASE_KEY in cfg_dict:
             cfg_dir = osp.dirname(filename)
             base_filename = cfg_dict.pop(BASE_KEY)
-            base_filename = base_filename if isinstance(base_filename, list) else [base_filename]
+            base_filename = (
+                base_filename if isinstance(base_filename, list) else [base_filename]
+            )
 
             cfg_dict_list = list()
             cfg_text_list = list()
@@ -156,7 +164,6 @@ class SLConfig(object):
         b = b.copy()
         for k, v in a.items():
             if isinstance(v, dict) and k in b and not v.pop(DELETE_KEY, False):
-
                 if not isinstance(b[k], dict) and not isinstance(b[k], list):
                     # if :
                     # import ipdb; ipdb.set_trace()
@@ -172,7 +179,8 @@ class SLConfig(object):
                     _ = int(k)
                 except:
                     raise TypeError(
-                        f"b is a list, " f"index {k} should be an int when input but {type(k)}"
+                        f"b is a list, "
+                        f"index {k} should be an int when input but {type(k)}"
                     )
                 b[int(k)] = SLConfig._merge_a_into_b(v, b[int(k)])
             else:
@@ -185,7 +193,7 @@ class SLConfig(object):
         cfg_dict, cfg_text = SLConfig._file2dict(filename)
         return SLConfig(cfg_dict, cfg_text=cfg_text, filename=filename)
 
-    def __init__(self, cfg_dict=None, cfg_text=None, filename=None):
+    def __init__(self, cfg_dict=None, cfg_text=None, filename=None) -> None:
         if cfg_dict is None:
             cfg_dict = dict()
         elif not isinstance(cfg_dict, dict):
@@ -215,7 +223,6 @@ class SLConfig(object):
 
     @property
     def pretty_text(self):
-
         indent = 4
 
         def _indent(s_, num_spaces):
@@ -307,10 +314,10 @@ class SLConfig(object):
 
         return text
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Config (path: {self.filename}): {self._cfg_dict.__repr__()}"
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._cfg_dict)
 
     def __getattr__(self, name):
@@ -329,12 +336,12 @@ class SLConfig(object):
     def __getitem__(self, name):
         return self._cfg_dict.__getitem__(name)
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name, value) -> None:
         if isinstance(value, dict):
             value = ConfigDict(value)
         self._cfg_dict.__setattr__(name, value)
 
-    def __setitem__(self, name, value):
+    def __setitem__(self, name, value) -> None:
         if isinstance(value, dict):
             value = ConfigDict(value)
         self._cfg_dict.__setitem__(name, value)
@@ -350,7 +357,7 @@ class SLConfig(object):
             with open(file, "w") as f:
                 f.write(self.pretty_text)
 
-    def merge_from_dict(self, options):
+    def merge_from_dict(self, options) -> None:
         """Merge list into cfg_dict
 
         Merge the dict parsed by MultipleKVAction into this cfg.

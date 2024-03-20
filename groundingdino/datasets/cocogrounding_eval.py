@@ -27,7 +27,7 @@ from groundingdino.util.misc import all_gather
 
 
 class CocoGroundingEvaluator(object):
-    def __init__(self, coco_gt, iou_types, useCats=True):
+    def __init__(self, coco_gt, iou_types, useCats=True) -> None:
         assert isinstance(iou_types, (list, tuple))
         coco_gt = copy.deepcopy(coco_gt)
         self.coco_gt = coco_gt
@@ -42,7 +42,7 @@ class CocoGroundingEvaluator(object):
         self.eval_imgs = {k: [] for k in iou_types}
         self.useCats = useCats
 
-    def update(self, predictions):
+    def update(self, predictions) -> None:
         img_ids = list(np.unique(list(predictions.keys())))
         self.img_ids.extend(img_ids)
 
@@ -63,16 +63,18 @@ class CocoGroundingEvaluator(object):
 
             self.eval_imgs[iou_type].append(eval_imgs)
 
-    def synchronize_between_processes(self):
+    def synchronize_between_processes(self) -> None:
         for iou_type in self.iou_types:
             self.eval_imgs[iou_type] = np.concatenate(self.eval_imgs[iou_type], 2)
-            create_common_coco_eval(self.coco_eval[iou_type], self.img_ids, self.eval_imgs[iou_type])
+            create_common_coco_eval(
+                self.coco_eval[iou_type], self.img_ids, self.eval_imgs[iou_type]
+            )
 
-    def accumulate(self):
+    def accumulate(self) -> None:
         for coco_eval in self.coco_eval.values():
             coco_eval.accumulate()
 
-    def summarize(self):
+    def summarize(self) -> None:
         for iou_type, coco_eval in self.coco_eval.items():
             print("IoU metric: {}".format(iou_type))
             coco_eval.summarize()
@@ -127,7 +129,9 @@ class CocoGroundingEvaluator(object):
             labels = prediction["labels"].tolist()
 
             rles = [
-                mask_util.encode(np.array(mask[0, :, :, np.newaxis], dtype=np.uint8, order="F"))[0] 
+                mask_util.encode(
+                    np.array(mask[0, :, :, np.newaxis], dtype=np.uint8, order="F")
+                )[0]
                 for mask in masks
             ]
             for rle in rles:
@@ -200,7 +204,7 @@ def merge(img_ids, eval_imgs):
     return merged_img_ids, merged_eval_imgs
 
 
-def create_common_coco_eval(coco_eval, img_ids, eval_imgs):
+def create_common_coco_eval(coco_eval, img_ids, eval_imgs) -> None:
     img_ids, eval_imgs = merge(img_ids, eval_imgs)
     img_ids = list(img_ids)
     eval_imgs = list(eval_imgs.flatten())
@@ -227,7 +231,9 @@ def evaluate(self):
     # add backward compatibility if useSegm is specified in params
     if p.useSegm is not None:
         p.iouType = "segm" if p.useSegm == 1 else "bbox"
-        print("useSegm (deprecated) is not None. Running {} evaluation".format(p.iouType))
+        print(
+            "useSegm (deprecated) is not None. Running {} evaluation".format(p.iouType)
+        )
     # print('Evaluate annotation type *{}*'.format(p.iouType))
     p.imgIds = list(np.unique(p.imgIds))
     if p.useCats:
@@ -244,16 +250,17 @@ def evaluate(self):
     elif p.iouType == "keypoints":
         computeIoU = self.computeOks
     self.ious = {
-        (imgId, catId): computeIoU(imgId, catId) 
-        for imgId in p.imgIds 
-        for catId in catIds}
+        (imgId, catId): computeIoU(imgId, catId)
+        for imgId in p.imgIds
+        for catId in catIds
+    }
 
     evaluateImg = self.evaluateImg
     maxDet = p.maxDets[-1]
     evalImgs = [
-        evaluateImg(imgId, catId, areaRng, maxDet) 
-        for catId in catIds 
-        for areaRng in p.areaRng 
+        evaluateImg(imgId, catId, areaRng, maxDet)
+        for catId in catIds
+        for areaRng in p.areaRng
         for imgId in p.imgIds
     ]
     # this is NOT in the pycocotools code, but could be done outside
