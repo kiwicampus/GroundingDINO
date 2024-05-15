@@ -30,7 +30,15 @@ def install_torch() -> None:
     try:
         import torch
     except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "torch"])
+        try:
+            subprocess.check_call([sys.executable, "-m", "ensurepip"])
+        except subprocess.CalledProcessError as e:
+            print(f"Error ensuring pip: {e}")
+        
+        try:
+            import torch
+        except ImportError:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "torch"])
 
 
 # Call the function to ensure torch is installed
